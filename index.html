@@ -2406,6 +2406,7 @@ const sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession
 const ACTS = [
   { key: 'checkin_start', label: 'ترمومتر المشاعر · البداية' },
   { key: 'react', label: 'بنك ردود الأفعال' },
+  { key: 'path', label: 'المسار الانفعالي' },
   { key: 'buttons', label: 'أزراري الساخنة' },
   { key: 'checkin_end', label: 'ترمومتر المشاعر · الختام' },
   { key: 'commit', label: 'كارت الالتزام' }
@@ -2416,6 +2417,23 @@ const SCENES = [
   'اترفض طلب إجازتك قبل السفر بيومين.',
   'حد علّى صوته عليك قدام الناس.'
 ];
+const REACT_SECS = { red: 20, green: 50 };
+const PATH_SCENE = 'عميل غاضب يصرخ في وجهك أمام الزملاء';
+const PATH_CARDS = [
+  { label: 'موقف', text: 'عميل غاضب يصرخ في وجهك أمام الزملاء' },
+  { label: 'فكرة تلقائية', text: '«إنه يهينني ولا يحترمني»' },
+  { label: 'شعور', text: 'غضب وتوتر وإحراج' },
+  { label: 'رد فعل', text: 'الرد عليه بصوت مرتفع' },
+  { label: 'نتيجة', text: 'تصعيد المشكلة وخسارة العميل' }
+];
+const PATH_ORDER = [3, 0, 4, 2, 1];
+const PATH_STEPS = [
+  { key: 'thought', label: 'فكرة واعية', ph: 'كيف تفسّر الموقف بهدوء؟' },
+  { key: 'feeling', label: 'شعور', ph: 'ما شعورك الآن؟' },
+  { key: 'reaction', label: 'رد فعل واعٍ', ph: 'ماذا ستقول أو تفعل؟' },
+  { key: 'result', label: 'نتيجة', ph: 'ما النتيجة المتوقعة؟' }
+];
+const PATH_MODEL = 'فكرة: «هو منزعج من المشكلة، وليس مني شخصيًا» ← شعور: توتر مع هدوء مسيطر ← رد فعل: أخذ نفس عميق، والإصغاء، ثم «أفهم انزعاجك، دعني أحل الأمر الآن» ← نتيجة: تهدئة العميل وحل المشكلة وكسب ثقته.';
 const WORDS = ['متحمس','فضولي','هادي','تعبان','متوتر','مبسوط','قلقان','مركّز','مشتت'];
 const COLORS = [['#3B5BDB','أزرق'],['#0F766E','أخضر مزرق'],['#B45309','برتقالي'],['#7C3AED','بنفسجي']];
 const CATS = [
@@ -2442,7 +2460,7 @@ function h(tag, attrs, ...kids){
     else if (k === 'value') el.value = v;
     else el.setAttribute(k, v === true ? '' : v);
   }
-  for (const c of kids.flat()) { if (c == null || c === false) continue; el.append(c.nodeType ? c : document.createTextNode(String(c))); }
+  for (const c of kids.flat(Infinity)) { if (c == null || c === false) continue; el.append(c.nodeType ? c : document.createTextNode(String(c))); }
   return el;
 }
 const icon = (d, stroke) => { const s = document.createElementNS('http://www.w3.org/2000/svg','svg'); s.setAttribute('width','42'); s.setAttribute('height','42'); s.setAttribute('viewBox','0 0 24 24'); s.setAttribute('fill','none'); s.setAttribute('stroke', stroke || 'currentColor'); s.setAttribute('stroke-width','2.4'); s.setAttribute('stroke-linecap','round'); s.setAttribute('stroke-linejoin','round'); s.setAttribute('aria-hidden','true'); s.innerHTML = d; return s; };
@@ -2451,7 +2469,7 @@ const ICON_CHECK = '<path d="M5 12l5 5L19 7"></path>';
 
 function setAccent(c){ if (/^#[0-9A-Fa-f]{6}$/.test(c || '')) document.documentElement.style.setProperty('--accent', c); }
 const app = document.getElementById('app');
-function mount(node){ app.replaceChildren(node); }
+function mount(node){ app.replaceChildren(...[node].flat(Infinity)); }
 
 /* ---------------- Trainee ---------------- */
 const T = { code: null, pid: null, name: '', session: null, sub: null, poll: null, done: {}, local: {}, timer: null, secs: 30, sceneKey: '' };
@@ -2517,7 +2535,7 @@ function applySession(s){
   const sceneKey = s.open_activity === 'react' ? s.react_phase + s.react_scene : '';
   const changed = !prev || prev.open_activity !== s.open_activity || T.sceneKey !== sceneKey || prev.training_name !== s.training_name || prev.accent !== s.accent;
   T.session = s; setAccent(s.accent); document.title = s.training_name;
-  if (T.sceneKey !== sceneKey) { T.sceneKey = sceneKey; T.secs = 30; }
+  if (T.sceneKey !== sceneKey) { T.sceneKey = sceneKey; T.secs = REACT_SECS[s.react_phase] || 20; }
   if (changed) renderTrainee();
 }
 function doneKey(){ const s = T.session; if (!s || !s.open_activity) return ''; return s.open_activity === 'react' ? 'react:' + s.react_phase + ':' + s.react_scene : s.open_activity; }
@@ -2526,6 +2544,7 @@ function renderTrainee(){
   clearInterval(T.timer);
   const s = T.session; const a = s && s.open_activity;
   if (!a) return mount(phoneShell(waitView(Object.keys(T.done).length ? 'تمام، وصل. مستنيين الأكتيفيتي الجاية' : 'إنت جوه. مستنيين نبدأ')));
+  if (a === 'path') return mount(phoneShell(pathView()));
   if (T.done[doneKey()]) {
     if (a === 'commit') return mount(phoneShell(doneView()));
     return mount(phoneShell(waitView(a === 'react' ? 'وصل ردك. مستنيين الموقف الجاي' : 'تمام، وصل. بص على الشاشة الكبيرة')));
@@ -2588,6 +2607,81 @@ function reactView(){
     h('div', { class: 'phase ' + (red ? 'red' : 'green') }, h('b', {}, red ? 'الجولة الأولى: رد الفعل الأحمر' : 'الجولة التانية: رد الفعل الأخضر'), h('span', {}, red ? 'أول حاجة جت في دماغك، من غير تفكير.' : 'نفس الموقف، بس لو خدت 10 ثواني تفكر.')),
     h('label', { for: 'rx' }, 'ردك'), ta, btn, err,
     h('p', { class: 'small' }, 'ردك بيظهر على الشاشة الكبيرة من غير اسمك.')
+  ];
+}
+function pathView(){
+  const P = T.path || (T.path = { slots: [null,null,null,null,null], selected: null, flash: {}, mistakes: 0, texts: ['','','',''], showModel: false });
+  const rerender = () => renderTrainee();
+  // Stage 2 already sent: show summary + suggested path
+  if (T.done['path']) {
+    return [
+      h('span', { class: 'eyebrow' }, 'المسار الانفعالي'),
+      h('div', { class: 'center', style: 'padding-top:16px' }, h('div', { class: 'circle ok' }, icon(ICON_CHECK, '#FFFFFF')), h('h2', {}, 'وصل مسارك. بص على الشاشة الكبيرة')),
+      h('button', { class: 'btn ghost', onclick: () => { P.showModel = !P.showModel; rerender(); } }, P.showModel ? 'إخفاء المسار المقترح' : 'عرض المسار المقترح'),
+      P.showModel ? h('div', { class: 'box', style: 'line-height:1.8' }, h('b', {}, 'مسار مقترح برد فعل واعٍ'), h('span', {}, PATH_MODEL)) : null
+    ];
+  }
+  // Stage 2: rewrite the path
+  if (T.done['path1']) {
+    const tas = PATH_STEPS.map((st, i) => h('textarea', { id: 'pt' + i, rows: '2', maxlength: '200', placeholder: st.ph, value: P.texts[i], oninput: (e) => { P.texts[i] = e.target.value; } }));
+    const err = h('div', { class: 'err', role: 'alert' });
+    const btn = h('button', { class: 'btn', onclick: async () => {
+      const vals = P.texts.map(t => t.trim());
+      if (vals.some(v => !v)) { err.textContent = 'اكتب كل خطوة في المسار.'; return; }
+      btn.disabled = true;
+      const data = { phase: 2 }; PATH_STEPS.forEach((st, i) => data[st.key] = vals[i]);
+      const ok = await send('eq_responses', { session_code: T.code, activity: 'path', pid: T.pid, data }, 'path');
+      if (!ok) btn.disabled = false;
+    } }, 'ابعت مسارك');
+    return [
+      h('span', { class: 'eyebrow' }, 'المسار الانفعالي · المرحلة 2 من 2'),
+      h('h2', {}, 'أعد كتابة المسار برد فعل واعٍ'),
+      h('p', {}, 'الموقف كما هو. اكتب كيف يتغير كل حرف في المسار حين تختار رد فعل واعيًا.'),
+      h('div', { class: 'scene' }, 'موقف: ' + PATH_SCENE),
+      PATH_STEPS.map((st, i) => [h('label', { for: 'pt' + i }, (i + 2) + '. ' + st.label), tas[i]]),
+      btn, err
+    ];
+  }
+  // Stage 1: order the cards
+  const placed = P.slots.filter((v, i) => v === i).length;
+  const used = new Set(P.slots.filter(v => v != null));
+  const place = (i) => {
+    const id = P.selected; if (id == null || P.slots[i] != null) return;
+    P.slots[i] = id; P.selected = null;
+    if (id === i) { P.flash[i] = 'ok'; rerender(); return; }
+    P.flash[i] = 'bad'; P.mistakes++; rerender();
+    setTimeout(() => { P.slots[i] = null; P.flash[i] = null; if (T.session && T.session.open_activity === 'path' && !T.done['path1']) rerender(); }, 1100);
+  };
+  const slotEls = P.slots.map((v, i) => {
+    const f = P.flash[i];
+    const bc = f === 'ok' ? 'var(--green)' : f === 'bad' ? 'var(--red)' : P.selected != null && v == null ? 'var(--ink)' : 'var(--line)';
+    const bg = f === 'ok' ? 'var(--greenbg)' : f === 'bad' ? 'var(--redbg)' : 'var(--card)';
+    return [
+      h('button', { 'aria-label': 'الخانة ' + (i + 1), onclick: () => place(i), style: 'display:flex;align-items:center;gap:12px;min-height:64px;padding:10px 14px;border-radius:14px;text-align:right;border:2px ' + (v == null ? 'dashed' : 'solid') + ' ' + bc + ';background:' + bg },
+        h('b', { style: 'width:28px;height:28px;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;flex-shrink:0' }, i + 1),
+        h('span', { style: 'font-size:15px;line-height:1.6;' + (v == null ? 'color:var(--muted)' : 'font-weight:700') }, v == null ? 'اضغط هنا بعد ما تختار الكرت' : PATH_CARDS[v].label + ': ' + PATH_CARDS[v].text)),
+      i < 4 ? h('div', { 'aria-hidden': 'true', style: 'text-align:center;color:var(--muted);line-height:1' }, '↓') : null
+    ];
+  });
+  const pool = PATH_ORDER.filter(id => !used.has(id)).map(id => h('button', { 'aria-pressed': P.selected === id ? 'true' : 'false', onclick: () => { P.selected = P.selected === id ? null : id; rerender(); },
+    style: 'display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:14px;text-align:right;background:var(--card);border:2px solid ' + (P.selected === id ? 'var(--accent)' : 'var(--line)') + (P.selected === id ? ';box-shadow:0 0 0 2px var(--accent)' : '') },
+    h('span', { class: 'eyebrow' }, PATH_CARDS[id].label), h('span', { style: 'font-size:15px;font-weight:700;line-height:1.6' }, PATH_CARDS[id].text)));
+  const err = h('div', { class: 'err', role: 'alert' });
+  const nextBtn = h('button', { class: 'btn', onclick: async () => {
+    nextBtn.disabled = true;
+    const ok = await send('eq_responses', { session_code: T.code, activity: 'path', pid: T.pid, data: { phase: 1, mistakes: P.mistakes } }, 'path1');
+    if (!ok) nextBtn.disabled = false;
+  } }, 'المرحلة الثانية ←');
+  return [
+    h('span', { class: 'eyebrow' }, 'المسار الانفعالي · المرحلة 1 من 2'),
+    h('h2', {}, 'رتب المسار الانفعالي'),
+    h('p', {}, 'اضغط الكرت ثم اضغط الخانة المناسبة، بالترتيب الذي يمر به الانفعال من الموقف حتى النتيجة. الإجابات الخاطئة تعود إلى مكانها.'),
+    h('div', { class: 'box' }, h('span', { class: 'eyebrow' }, 'السيناريو'), h('b', {}, PATH_SCENE)),
+    h('div', { style: 'display:flex;flex-direction:column;gap:6px' }, slotEls),
+    placed === 5
+      ? [h('div', { class: 'phase green' }, h('b', {}, 'ترتيب صحيح'), h('span', {}, 'الموقف يثير الفكرة، والفكرة تثير الشعور، والشعور يقود رد الفعل.')), nextBtn, err]
+      : [h('span', { class: 'eyebrow' }, 'الكروت (' + (5 - used.size) + ')'), h('div', { style: 'display:flex;flex-direction:column;gap:8px' }, pool),
+         h('button', { class: 'btn ghost', onclick: () => { P.slots = [null,null,null,null,null]; P.flash = {}; P.selected = null; rerender(); } }, 'إعادة')]
   ];
 }
 function buttonsView(){
@@ -2784,6 +2878,22 @@ function renderMain(){
       h('div', { class: 'cols' },
         h('div', { class: 'col red' }, h('b', { style: 'color:var(--redink);font-size:18px' }, 'الأحمر · أول رد فعل (' + red.length + ')'), red.map(r => h('div', { class: 'card' }, r.data.text))),
         h('div', { class: 'col green' }, h('b', { style: 'color:var(--greenink);font-size:18px' }, 'الأخضر · بعد 10 ثواني تفكير (' + green.length + ')'), green.map(r => h('div', { class: 'card' }, r.data.text)))));
+  } else if (v === 'path') {
+    const rows = bySession('path');
+    const p1 = rows.filter(r => r.data.phase === 1), p2 = rows.filter(r => r.data.phase === 2);
+    const avgMist = p1.length ? (p1.reduce((a, r) => a + (Number(r.data.mistakes) || 0), 0) / p1.length).toFixed(1) : '—';
+    const stat = (label, val) => h('div', { class: 'stat', style: 'min-width:180px;padding:16px' }, h('span', { style: 'color:#C5C9D2' }, label), h('b', { style: 'font-size:44px' }, val));
+    el.replaceChildren(
+      h('div', { style: 'display:flex;gap:16px;flex-wrap:wrap;align-items:stretch' },
+        stat('رتّبوا المسار', p1.length), stat('متوسط الأخطاء', avgMist), stat('كتبوا المسار الواعي', p2.length),
+        h('div', { style: 'display:flex;flex-direction:column;justify-content:center;gap:8px' },
+          h('button', { class: 'btn ghost', style: 'width:auto;padding:0 18px', onclick: () => { H.showModel = !H.showModel; renderMain(); } }, H.showModel ? 'إخفاء المسار المقترح' : 'اعرض المسار المقترح'))),
+      H.showModel ? h('div', { class: 'scene' }, 'مسار مقترح برد فعل واعٍ: ' + PATH_MODEL) : null,
+      h('div', { class: 'box' }, h('b', {}, 'الموقف: ' + PATH_SCENE)),
+      h('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px' },
+        PATH_STEPS.map(st => h('div', { class: 'col green', style: 'max-height:50vh' },
+          h('b', { style: 'color:var(--greenink);font-size:18px' }, st.label),
+          p2.length ? p2.map(r => h('div', { class: 'card' }, r.data[st.key])) : h('span', { class: 'small' }, 'مستنيين...')))));
   } else if (v === 'buttons') {
     const items = []; bySession('buttons').forEach(r => (r.data.items || []).forEach(t => items.push(String(t))));
     const tally = {}; CATS.forEach(([c]) => tally[c] = 0); tally['أخرى'] = 0;
