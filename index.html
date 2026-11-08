@@ -2417,6 +2417,7 @@ const SCENES = [
   'اترفض طلب إجازتك قبل السفر بيومين.',
   'حد علّى صوته عليك قدام الناس.'
 ];
+const TRAINER_NAME = 'إياد';
 const REACT_SECS = { red: 20, green: 50 };
 const PATH_SCENE = 'عميل غاضب يصرخ في وجهك أمام الزملاء';
 const PATH_CARDS = [
@@ -2543,7 +2544,7 @@ function doneKey(){ const s = T.session; if (!s || !s.open_activity) return ''; 
 function renderTrainee(){
   clearInterval(T.timer);
   const s = T.session; const a = s && s.open_activity;
-  if (!a) return mount(phoneShell(waitView(Object.keys(T.done).length ? 'تمام، وصل. مستنيين الأكتيفيتي الجاية' : 'إنت جوه. مستنيين نبدأ')));
+  if (!a) return mount(phoneShell(waitView(Object.keys(T.done).length ? 'تمام، وصل. استنى ' + trainerName() + ' يفتح الأكتيفيتي الجاية' : 'إنت جوه. استنى ' + trainerName() + ' هيبدأ')));
   if (a === 'path') return mount(phoneShell(pathView()));
   if (T.done[doneKey()]) {
     if (a === 'commit') return mount(phoneShell(doneView()));
@@ -2555,8 +2556,9 @@ function renderTrainee(){
   if (a === 'commit') return mount(phoneShell(commitView()));
 }
 function waitView(title){
-  return h('div', { class: 'center' }, h('div', { class: 'circle' }, icon(ICON_CLOCK, '#1C1F26')), h('h2', {}, title), h('p', {}, 'الشاشة دي هتتغير لوحدها لما المدرب يفتح الأكتيفيتي اللي جاية.'));
+  return h('div', { class: 'center' }, h('div', { class: 'circle' }, icon(ICON_CLOCK, '#1C1F26')), h('h2', {}, title), h('p', {}, 'الشاشة دي هتتغير لوحدها لما ' + trainerName() + ' يفتح الأكتيفيتي اللي جاية.'));
 }
+function trainerName(){ return TRAINER_NAME || 'المدرب'; }
 async function send(table, row, key){
   const { error } = await sb.from(table).insert(row);
   if (error) { alertBox('ماوصلش. اتأكد من النت وجرب تاني.'); return false; }
@@ -2743,8 +2745,7 @@ function startHost(){
 function renderHostLogin(error){
   let accent = COLORS[0][0];
   const tn = h('input', { id: 'tn', value: 'الذكاء العاطفي', maxlength: '80' });
-  const co = h('input', { id: 'co', maxlength: '80', placeholder: 'بيظهر على البروجيكتور بس' });
-  const pin = h('input', { id: 'pin', inputmode: 'numeric', maxlength: '20', placeholder: '4 أرقام أو أكتر' });
+  const co = h('input', { id: 'co', maxlength: '80', placeholder: 'بيظهر على البروجيكتور بس' });  const pin = h('input', { id: 'pin', inputmode: 'numeric', maxlength: '20', placeholder: '4 أرقام أو أكتر' });
   const sw = h('div', { class: 'sw' }, COLORS.map(([c,l], i) => h('button', { class: i ? '' : 'on', 'aria-label': 'لون ' + l, style: 'background:' + c, onclick: (e) => { accent = c; setAccent(c); sw.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === e.currentTarget)); } })));
   const err = h('div', { class: 'err', role: 'alert' }, error || '');
   const create = h('button', { class: 'btn', onclick: async () => {
@@ -2760,8 +2761,7 @@ function renderHostLogin(error){
   mount(h('div', { class: 'phone' }, topBar('لوحة المدرب', ''), h('div', { class: 'body' },
     h('h1', {}, 'جلسة جديدة'),
     h('label', { for: 'tn' }, 'اسم الترينينج'), tn,
-    h('label', { for: 'co' }, 'اسم الشركة أو الجروب (اختياري)'), co,
-    h('span', { style: 'font-weight:700' }, 'لون الجلسة'), sw,
+    h('label', { for: 'co' }, 'اسم الشركة أو الجروب (اختياري)'), co,    h('span', { style: 'font-weight:700' }, 'لون الجلسة'), sw,
     h('label', { for: 'pin' }, 'PIN للمدرب'), pin,
     h('p', { class: 'small' }, 'الـ PIN بيحمي لوحة التحكم والالتزامات. احفظه.'),
     create, err,
@@ -2817,8 +2817,7 @@ function renderHost(){
     h('label', { for: 'stn' }, 'اسم الترينينج'),
     h('input', { id: 'stn', value: s.training_name, maxlength: '80', onchange: (e) => hostUpdate({ training_name: e.target.value.trim() || s.training_name }) }),
     h('label', { for: 'sco' }, 'اسم الشركة أو الجروب (اختياري)'),
-    h('input', { id: 'sco', value: s.company, maxlength: '80', onchange: (e) => hostUpdate({ company: e.target.value.trim() }) }),
-    h('span', { style: 'font-weight:700' }, 'لون الجلسة'),
+    h('input', { id: 'sco', value: s.company, maxlength: '80', onchange: (e) => hostUpdate({ company: e.target.value.trim() }) }),    h('span', { style: 'font-weight:700' }, 'لون الجلسة'),
     h('div', { class: 'sw' }, COLORS.map(([c,l]) => h('button', { class: s.accent === c ? 'on' : '', 'aria-label': 'لون ' + l, style: 'background:' + c, onclick: () => hostUpdate({ accent: c }) }))),
     h('div', { class: 'sep' }),
     h('span', { class: 'eyebrow' }, 'الأكتيفيتيز'),
